@@ -1,0 +1,4 @@
+# Runtime deps (mirrors pyproject.toml). Install: pip install -r requirements.txt
+# mcp<2: v1 FastMCP API (mcp 2.x renamed FastMCP -> MCPServer)
+mcp>=1.6,<2
+httpx>=0.27
