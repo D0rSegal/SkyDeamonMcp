@@ -26,6 +26,9 @@ SKYDEMON_LOGIN=you@example.com
 SKYDEMON_PASSWORD=...
 ```
 
+The server loads this `.env` itself on startup (real environment wins if
+both are set), so just run it — no `export`/`$env:` needed.
+
 Optional: `SKYDEMON_ROUTES_DIR` to override `~/Documents/SkyDemon/Routes`,
 `SKYDEMON_CHARTS_DIR` for charts, `SKYDEMON_INSTALL_DIR` for the install dir.
 
@@ -48,12 +51,12 @@ Requires `mcp<2` (v1 FastMCP API).
 ## Run the MCP server (stdio)
 
 ```powershell
-$env:SKYDEMON_LOGIN="you@example.com"; $env:SKYDEMON_PASSWORD="..."
-.\.venv\Scripts\skydeamon-mcp
-# or: .\.venv\Scripts\python.exe -m skydeamon.server
+.\.venv\Scripts\python.exe -m skydeamon.server
+# or: .\.venv\Scripts\skydeamon-mcp.exe
+# HTTP: .\.venv\Scripts\python.exe -m skydeamon.server --transport streamable-http --port 8000
 ```
 
-It logs in once on startup and holds the session in memory (`skydeamon/session.py`).
+Creds come from `.env` automatically (or process env). It logs in once on startup and holds the session in memory (`skydeamon/session.py`).
 Claude Desktop config:
 
 ```json
@@ -66,6 +69,18 @@ Claude Desktop config:
   }
 }
 ```
+
+## Run over HTTP (Streamable HTTP, current standard)
+
+```powershell
+.\.venv\Scripts\skydeamon-mcp --transport streamable-http --port 8000
+# flags: --transport stdio|streamable-http|sse (default stdio), --host, --port
+```
+
+Serves the same tools at `http://127.0.0.1:8000/mcp` (verified: initialize →
+`tools/list` → `tools/call`). Keep it on localhost — the endpoint has no
+auth of its own; use a reverse proxy if you ever expose it. Old SSE transport
+is deprecated upstream, prefer `streamable-http`.
 
 ## Tools
 
@@ -81,6 +96,7 @@ Claude Desktop config:
 | `skydemon_airfield_info` | Full record: runways, frequencies, fuel, circuits, contacts + pilot notes & live feedback (online, needs login) |
 | `skydemon_list_cloud_flightplans` | List flightplans in cloud storage (read-only) |
 | `skydemon_download_cloud_flightplan` | Download + summarize one cloud plan (`save:true` keeps a local copy) |
+| `skydemon_airfield_weather` | Current METAR + TAF for an airfield (`what: metar|taf|both`, raw bulletins) |
 
 ## Layout
 
@@ -89,5 +105,6 @@ Claude Desktop config:
 - `skydeamon/session.py` — in-memory session cache
 - `skydeamon/flightplans.py` — read-only disk parsing
 - `skydeamon/airfields.py` — offline chart index (search) + pilot notes / feedback
-- `skydeamon/server.py` — MCP server
+- `skydeamon/weather.py` — METAR/TAF via Bulletin/Refresh (5-min cache)
+- `skydeamon/server.py` — MCP server (stdio + `--transport streamable-http`)
 - `tmp/` — local-only decompile + scratch (ignored)

@@ -219,3 +219,7 @@ __marimo__/
 
 
 tmp/
+
+# Local-only OpenCode config (points at localhost MCP server)
+opencode.json
+.mcp.json

@@ -1,13 +1,16 @@
-"""SkyDemon MCP server (stdio). Login cached in memory; flightplans read-only."""
+"""SkyDemon MCP server. Login cached in memory; flightplans read-only."""
 from __future__ import annotations
 
+import argparse
 import os
+from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
 
 from .api import get_device_identifier, get_device_type
 from . import airfields as af
 from . import cloud as cl
+from . import weather as wx
 from .config import BASE_URL, PRODUCT_NAME, PRODUCT_VERSION
 from .flightplans import (
     list_flightplans,
@@ -201,11 +204,81 @@ def skydemon_download_cloud_flightplan(name: str, save: bool = False,
     return out
 
 
-def main() -> None:
+def _load_env(path: Path | None = None) -> None:
+    """Load project-root .env silently (never prints values).
+
+    Real environment always wins (no override). Works with python-dotenv
+    when installed; falls back to a tiny built-in parser otherwise.
+    """
+    dotenv_path = path or Path(__file__).resolve().parent.parent / ".env"
+    try:
+        text = dotenv_path.read_text(encoding="utf-8")
+    except OSError:
+        return
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        load_dotenv = None
+    if load_dotenv is not None:
+        load_dotenv(dotenv_path, override=False)
+        return
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, val = line.split("=", 1)
+        key, val = key.strip(), val.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = val
+
+
+@mcp.tool()
+def skydemon_airfield_weather(icao_or_name: str, what: str = "both") -> dict:
+    """Current METAR + TAF for an airfield (raw bulletins, needs login).
+
+    Args:
+        icao_or_name: ICAO code ('LOWW') or airfield name (resolved offline).
+        what: 'metar', 'taf', or 'both'. VFR/IFR assessment is left to the
+            caller from the raw METAR text.
+    """
+    if what not in ("metar", "taf", "both"):
+        return {"ok": False, "error": "what must be metar, taf or both"}
+    key = icao_or_name.strip().upper()
+    if not wx.is_icao(key):
+        found = af.find_airfield(icao_or_name)
+        if found is None or not found.icao:
+            return {"ok": False, "error": f"airfield not found: {icao_or_name}"}
+        key = found.icao.upper()
+    try:
+        res = ensure_session()
+        (w,) = wx.get_weather(res.authentication_token, [key]).values()
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+    return {"ok": True, **wx.weather_to_dict(w, what)}
+
+
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(prog="skydeamon-mcp",
+                                     description="SkyDemon MCP server")
+    parser.add_argument("--transport", default="stdio",
+                        choices=["stdio", "streamable-http", "sse"],
+                        help="MCP transport (default: stdio; 'sse' is deprecated upstream)")
+    parser.add_argument("--host", default="127.0.0.1",
+                        help="HTTP bind host (streamable-http/sse only)")
+    parser.add_argument("--port", type=int, default=8000,
+                        help="HTTP bind port (streamable-http/sse only)")
+    args = parser.parse_args(argv)
+    _load_env()
     # Login once at startup so tools reuse the in-memory session.
     if os.environ.get("SKYDEMON_LOGIN") and os.environ.get("SKYDEMON_PASSWORD"):
         startup_login()
-    mcp.run()
+    if args.transport == "stdio":
+        mcp.run()
+    else:
+        # mcp 1.x takes bind host/port from settings, transport from run()
+        mcp.settings.host = args.host
+        mcp.settings.port = args.port
+        mcp.run(transport=args.transport)
 
 
 if __name__ == "__main__":
