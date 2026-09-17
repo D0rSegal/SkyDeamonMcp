@@ -3,7 +3,7 @@
 MCP wrapper for SkyDemon (Windows). Reverse-engineered login interop, read-only
 flightplan access, offline airfield search + pilot notes / live feedback, and
 METAR/TAF weather. No SkyDemon code is shipped — only wire/file formats are
-reimplemented (see `tmp/decompiled/`, git-ignored).
+reimplemented from scratch for interop.
 
 Works locally over stdio (Claude Desktop) or Streamable HTTP (localhost), and
 remotely behind a tunnel with a built-in OAuth 2.0 provider for Gemini.
@@ -147,7 +147,7 @@ with `save:true`, plus `login`/`logout` which only touch the in-memory session.
 - `skydeamon/cloud.py` — cloud list/download (no upload/delete)
 - `skydeamon/server.py` — MCP server (stdio + `--transport streamable-http`)
 - `skydeamon/logging_config.py` — request/tool-call logging
-- `tmp/` — local-only decompile + scratch (ignored)
+- `tmp/` — local-only scratch (ignored, never committed)
 
 ## Disclaimer
 
