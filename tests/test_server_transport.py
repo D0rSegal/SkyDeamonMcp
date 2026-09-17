@@ -20,11 +20,11 @@ def test_main_stdio_default(monkeypatch):
 
 def test_main_streamable_http(monkeypatch):
     calls = {}
-    monkeypatch.setattr(server.mcp, "run", lambda *a, **k: calls.update(args=a, kwargs=k))
+    monkeypatch.setattr(server.uvicorn, "run", lambda *a, **k: calls.update(args=a, kwargs=k))
     _no_env(monkeypatch)
     server.main(["--transport", "streamable-http", "--port", "8080"])
-    assert calls["kwargs"] == {"transport": "streamable-http"}
-    assert (server.mcp.settings.host, server.mcp.settings.port) == ("127.0.0.1", 8080)
+    assert calls["kwargs"]["port"] == 8080
+    assert calls["kwargs"]["host"] == "127.0.0.1"
 
 
 def test_load_env_sets_missing_only(tmp_path, monkeypatch, capsys):

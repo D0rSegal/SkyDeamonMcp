@@ -1,0 +1,26 @@
+name = "skydemon-oauth"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+workers_dev = false
+
+[vars]
+# Comma-separated allowed redirect_uri prefixes for /oauth/authorize.
+ALLOWED_REDIRECTS = "https://,http://localhost,http://127.0.0.1"
+
+# Secrets (wrangler secret put <NAME>):
+#   OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET  -> also pasted into Gemini's form
+#   JWT_SECRET        -> HMAC key for issued JWTs
+#   ORIGIN_BASE       -> e.g. https://origin.segal.to (tunnel, Access-locked)
+#   SF_CLIENT_ID, SF_CLIENT_SECRET -> Cloudflare Access service token,
+#     sent to the origin on every proxied call.
+
+# Routes (need zone_id from dash.cloudflare.com -> segal.to -> Overview -> API):
+# [[routes]]
+# pattern = "flights.segal.to/mcp*"
+# zone_id = "<ZONE_ID>"
+# [[routes]]
+# pattern = "flights.segal.to/oauth/*"
+# zone_id = "<ZONE_ID>"
+# [[routes]]
+# pattern = "flights.segal.to/.well-known/*"
+# zone_id = "<ZONE_ID>"

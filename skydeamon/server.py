@@ -6,7 +6,13 @@ import os
 from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
+from starlette.applications import Starlette
+from starlette.middleware import Middleware
+from starlette.routing import Mount, Route
+import uvicorn
 
+from . import auth
 from .api import get_device_identifier, get_device_type
 from . import airfields as af
 from . import cloud as cl
@@ -20,7 +26,33 @@ from .flightplans import (
 )
 from .session import clear_session, ensure_session, session_status, startup_login
 
-mcp = FastMCP("skydemon")
+def _public_hosts() -> list[str]:
+    """Extra Host values allowed through DNS-rebinding protection.
+
+    Needed when the server sits behind a tunnel/proxy that forwards the
+    public hostname (e.g. Cloudflare Tunnel -> flights.segal.to).
+    Override with SKYDEMON_ALLOWED_HOSTS="a.example,b.example".
+    """
+    extra = os.environ.get("SKYDEMON_ALLOWED_HOSTS", "")
+    hosts = [h.strip() for h in extra.split(",") if h.strip()]
+    if not hosts:
+        hosts = ["flights.segal.to", "origin.segal.to"]
+    return hosts
+
+
+mcp = FastMCP(
+    "skydemon",
+    transport_security=TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        # NOTE: ":*" entries only match Host WITH a port; bare names are
+        # needed too because proxies forward "flights.segal.to" portless.
+        allowed_hosts=["127.0.0.1:*", "localhost:*", "[::1]:*", "testserver", "testserver:*"]
+        + [h for h in _public_hosts()]
+        + [f"{h}:*" for h in _public_hosts()],
+        allowed_origins=["http://127.0.0.1:*", "http://localhost:*", "http://[::1]:*", "http://testserver", "http://testserver:*"]
+        + [f"https://{h}:*" for h in _public_hosts()],
+    ),
+)
 
 
 @mcp.tool()
@@ -257,6 +289,31 @@ def skydemon_airfield_weather(icao_or_name: str, what: str = "both") -> dict:
     return {"ok": True, **wx.weather_to_dict(w, what)}
 
 
+def build_http_app(transport: str = "streamable-http") -> Starlette:
+    """Build ASGI Starlette app combining FastMCP and OAuth 2.0 endpoints."""
+    if transport == "sse":
+        mcp_app = mcp.sse_app()
+    else:
+        mcp_app = mcp.streamable_http_app()
+
+    # Wrap the combined app with OAuthMiddleware for Bearer token validation
+    oauth_middleware = [Middleware(auth.OAuthMiddleware)]
+
+    oauth_routes = [
+        Route("/.well-known/oauth-authorization-server", endpoint=auth.oauth_metadata_response, methods=["GET"]),
+        Route("/.well-known/openid-configuration", endpoint=auth.oauth_metadata_response, methods=["GET"]),
+        Route("/.well-known/oauth-protected-resource", endpoint=auth.oauth_protected_resource_metadata, methods=["GET"]),
+        Route("/.well-known/oauth-protected-resource/mcp", endpoint=auth.oauth_protected_resource_metadata, methods=["GET"]),
+        Route("/oauth/authorize", endpoint=auth.oauth_authorize_endpoint, methods=["GET", "POST"]),
+        Route("/oauth/token", endpoint=auth.oauth_token_endpoint, methods=["POST"]),
+        Route("/oauth/register", endpoint=auth.oauth_register_endpoint, methods=["POST"]),
+        Mount("/", app=mcp_app),
+    ]
+    # Forward lifespan so that session_manager task group initializes properly
+    lifespan = getattr(mcp_app.router, "lifespan_context", None)
+    return Starlette(routes=oauth_routes, middleware=oauth_middleware, lifespan=lifespan)
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="skydeamon-mcp",
                                      description="SkyDemon MCP server")
@@ -278,8 +335,10 @@ def main(argv: list[str] | None = None) -> None:
         # mcp 1.x takes bind host/port from settings, transport from run()
         mcp.settings.host = args.host
         mcp.settings.port = args.port
-        mcp.run(transport=args.transport)
+        app = build_http_app(transport=args.transport)
+        uvicorn.run(app, host=args.host, port=args.port, log_level=mcp.settings.log_level.lower())
 
 
 if __name__ == "__main__":
     main()
+

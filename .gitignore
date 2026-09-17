@@ -223,3 +223,8 @@ tmp/
 # Local-only OpenCode config (points at localhost MCP server)
 opencode.json
 .mcp.json
+
+# Local runner & credentials
+.env
+run.py
+
