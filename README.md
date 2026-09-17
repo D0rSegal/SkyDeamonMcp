@@ -148,3 +148,14 @@ with `save:true`, plus `login`/`logout` which only touch the in-memory session.
 - `skydeamon/server.py` — MCP server (stdio + `--transport streamable-http`)
 - `skydeamon/logging_config.py` — request/tool-call logging
 - `tmp/` — local-only decompile + scratch (ignored)
+
+## Disclaimer
+
+Unofficial project, not affiliated with or endorsed by SkyDemon (Divelements Limited).
+Built by reverse-engineering the SkyDemon app's wire/file formats for interop —
+no vendor code is shipped, but formats may change with any app update and break this wrapper.
+
+Use at your own risk: you are responsible for keeping your SkyDemon credentials
+safe, complying with SkyDemon's terms of service, and complying with applicable
+law in your jurisdiction. The authors accept no liability for account actions,
+data loss, or breakage resulting from use of this software.
